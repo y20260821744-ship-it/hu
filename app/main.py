@@ -1,10 +1,12 @@
 """FastAPI 应用：Web 管理面板 + 后台调度。
 
-面板功能：仪表盘（监控状态/统计）、关键词管理、规则管理、命中记录、
-平台设置（频率/渠道）、代理池管理（增删/启停/测试）、推送日志、手动触发抓取。
+面板功能：登录鉴权（账号体系）、仪表盘、关键词管理、规则管理、命中记录、
+平台设置（频率/渠道）、代理池管理（增删/启停/测试）、账号管理（管理员）、
+推送日志、手动触发抓取。
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -17,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import desc, func, select
 
-from . import models
+from . import models, security
 from .adapters import all_adapters, supported_platforms
 from .config import settings
 from .crawler.fetcher import bump_proxy_pool
@@ -29,13 +31,39 @@ logger = logging.getLogger(__name__)
 
 scheduler_mgr = SchedulerManager()
 
+SESSION_COOKIE = "monitor_session"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    ensure_default_admin()
     scheduler_mgr.start()
     yield
     scheduler_mgr.shutdown()
+
+
+def ensure_default_admin() -> None:
+    """首次启动创建默认管理员（.env 的 ADMIN_USERNAME / ADMIN_PASSWORD）。"""
+    db = SessionLocal()
+    try:
+        exists = db.scalar(select(func.count(models.User.id))) or 0
+        if exists == 0:
+            db.add(
+                models.User(
+                    username=settings.ADMIN_USERNAME,
+                    password_hash=security.hash_password(settings.ADMIN_PASSWORD),
+                    role="admin",
+                    enabled=True,
+                )
+            )
+            db.commit()
+            logger.warning(
+                "已创建默认管理员 %r，请尽快在「账号管理」页修改默认密码",
+                settings.ADMIN_USERNAME,
+            )
+    finally:
+        db.close()
 
 
 app = FastAPI(title="日本二手平台上新监控系统", lifespan=lifespan)
@@ -43,10 +71,96 @@ app = FastAPI(title="日本二手平台上新监控系统", lifespan=lifespan)
 templates = Jinja2Templates(directory=str(__import__("pathlib").Path(__file__).resolve().parent / "templates"))
 
 
+# ---------------- 登录鉴权 ----------------
+
+def current_user(request: Request) -> models.User | None:
+    """从签名 Cookie 解析当前登录用户；未登录/失效/被停用返回 None。"""
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    uid = security.verify_session_token(token)
+    if uid is None:
+        return None
+    db = SessionLocal()
+    try:
+        user = db.get(models.User, uid)
+        if user is None or not user.enabled:
+            return None
+        return user
+    finally:
+        db.close()
+
+
+def _require_login(request: Request):
+    """页面路由守卫：未登录跳转登录页；已登录返回 User。"""
+    user = current_user(request)
+    if user is None:
+        return RedirectResponse("/login?next=" + quote(request.url.path), status_code=303)
+    return user
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, msg: Optional[str] = Query(None)):
+    if current_user(request) is not None:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {"page": "login", "msg": msg or ""},
+    )
+
+
+@app.post("/login")
+async def login_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next: str = Form("/"),
+):
+    user: models.User | None = None
+    db = SessionLocal()
+    try:
+        row = db.scalar(
+            select(models.User).where(models.User.username == username.strip())
+        )
+        if row and row.enabled and security.verify_password(password, row.password_hash):
+            row.last_login_at = datetime.now()
+            db.commit()
+            user = row
+    finally:
+        db.close()
+
+    if user is None:
+        # 统一错误提示 + 延迟，减缓暴力破解
+        await asyncio.sleep(0.5)
+        return RedirectResponse("/login?msg=" + quote("用户名或密码错误，或账号已被停用"), status_code=303)
+
+    token = security.create_session_token(user.id)
+    resp = RedirectResponse("/" if next in ("", "/") else next, status_code=303)
+    resp.set_cookie(
+        SESSION_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.SESSION_TTL_HOURS * 3600,
+    )
+    return resp
+
+
+@app.get("/logout")
+async def logout():
+    resp = RedirectResponse("/login", status_code=303)
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp
+
+
 # ---------------- 页面 ----------------
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    user = _require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
     db = SessionLocal()
     try:
         total_items = db.scalar(select(func.count(models.Item.id))) or 0
@@ -89,6 +203,7 @@ async def dashboard(request: Request):
             "index.html",
             {
                 "page": "dashboard",
+                "user": user,
                 "stats": {
                     "total_items": total_items,
                     "today_new": today_new,
@@ -107,13 +222,16 @@ async def dashboard(request: Request):
 
 @app.get("/keywords", response_class=HTMLResponse)
 async def keywords_page(request: Request):
+    user = _require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
     db = SessionLocal()
     try:
         keywords = db.scalars(select(models.Keyword).order_by(models.Keyword.id)).all()
         return templates.TemplateResponse(
             request,
             "keywords.html",
-            {"page": "keywords", "keywords": keywords},
+            {"page": "keywords", "user": user, "keywords": keywords},
         )
     finally:
         db.close()
@@ -189,6 +307,9 @@ async def delete_keyword(kid: int):
 
 @app.get("/rules", response_class=HTMLResponse)
 async def rules_page(request: Request):
+    user = _require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
     db = SessionLocal()
     try:
         rules = db.scalars(select(models.Rule).order_by(models.Rule.id)).all()
@@ -197,6 +318,7 @@ async def rules_page(request: Request):
             "rules.html",
             {
                 "page": "rules",
+                "user": user,
                 "rules": rules,
                 "platforms": supported_platforms(),
             },
@@ -263,6 +385,9 @@ async def items_page(
     platform: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
 ):
+    user = _require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
     db = SessionLocal()
     try:
         q = select(models.Item).order_by(desc(models.Item.first_seen_at))
@@ -277,6 +402,7 @@ async def items_page(
             "items.html",
             {
                 "page": "items",
+                "user": user,
                 "items": items,
                 "platforms": supported_platforms(),
                 "cur_platform": platform or "",
@@ -291,6 +417,9 @@ async def items_page(
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
+    user = _require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
     db = SessionLocal()
     try:
         rows = []
@@ -309,7 +438,7 @@ async def settings_page(request: Request):
         return templates.TemplateResponse(
             request,
             "settings.html",
-            {"page": "settings", "rows": rows, "all_channels": ALL_CHANNEL_NAMES},
+            {"page": "settings", "user": user, "rows": rows, "all_channels": ALL_CHANNEL_NAMES},
         )
     finally:
         db.close()
@@ -341,13 +470,16 @@ async def update_setting(
 
 @app.get("/logs", response_class=HTMLResponse)
 async def logs_page(request: Request):
+    user = _require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
     db = SessionLocal()
     try:
         logs = db.scalars(select(models.PushLog).order_by(desc(models.PushLog.id)).limit(200)).all()
         return templates.TemplateResponse(
             request,
             "logs.html",
-            {"page": "logs", "logs": logs},
+            {"page": "logs", "user": user, "logs": logs},
         )
     finally:
         db.close()
@@ -373,6 +505,9 @@ def _mask_proxy(url: str) -> str:
 
 @app.get("/proxies", response_class=HTMLResponse)
 async def proxies_page(request: Request, msg: Optional[str] = Query(None)):
+    user = _require_login(request)
+    if isinstance(user, RedirectResponse):
+        return user
     db = SessionLocal()
     try:
         proxies = db.scalars(select(models.Proxy).order_by(models.Proxy.id)).all()
@@ -381,6 +516,7 @@ async def proxies_page(request: Request, msg: Optional[str] = Query(None)):
             "proxies.html",
             {
                 "page": "proxies",
+                "user": user,
                 "proxies": proxies,
                 "msg": msg or "",
                 "mask_proxy": _mask_proxy,
@@ -481,10 +617,155 @@ async def test_proxy(pid: int):
     )
 
 
+# ---------------- 账号管理（仅管理员） ----------------
+
+def _require_admin(request: Request):
+    """管理员守卫：未登录跳登录页；普通账号跳回首页。"""
+    user = current_user(request)
+    if user is None:
+        return RedirectResponse("/login?next=" + quote(request.url.path), status_code=303)
+    if user.role != "admin":
+        return RedirectResponse("/", status_code=303)
+    return user
+
+
+@app.get("/accounts", response_class=HTMLResponse)
+async def accounts_page(request: Request, msg: Optional[str] = Query(None)):
+    user = _require_admin(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    db = SessionLocal()
+    try:
+        users = db.scalars(select(models.User).order_by(models.User.id)).all()
+        # 默认管理员密码未改时给出提醒
+        default_admin = next(
+            (u for u in users if u.username == settings.ADMIN_USERNAME), None
+        )
+        is_default_pw = bool(
+            default_admin and security.verify_password(settings.ADMIN_PASSWORD, default_admin.password_hash)
+        )
+        return templates.TemplateResponse(
+            request,
+            "accounts.html",
+            {
+                "page": "accounts",
+                "user": user,
+                "users": users,
+                "msg": msg or "",
+                "is_default_pw": is_default_pw,
+                "default_username": settings.ADMIN_USERNAME,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/accounts")
+async def add_account(
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form("user"),
+):
+    db = SessionLocal()
+    try:
+        name = _restore_utf8(username).strip()
+        if not name or len(password) < 6:
+            return RedirectResponse("/accounts?msg=" + quote("用户名不能为空，密码至少 6 位"), status_code=303)
+        exists = db.scalar(
+            select(models.User.id).where(models.User.username == name)
+        )
+        if exists:
+            return RedirectResponse("/accounts?msg=" + quote("该用户名已存在"), status_code=303)
+        db.add(
+            models.User(
+                username=name,
+                password_hash=security.hash_password(password),
+                role="admin" if role == "admin" else "user",
+                enabled=True,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse("/accounts?msg=" + quote("账号已创建"), status_code=303)
+
+
+def _last_admin_count(db) -> int:
+    return db.scalar(
+        select(func.count(models.User.id)).where(
+            models.User.role == "admin", models.User.enabled.is_(True)
+        )
+    ) or 0
+
+
+@app.post("/accounts/{uid}/toggle")
+async def toggle_account(uid: int, request: Request):
+    admin = _require_admin(request)
+    if isinstance(admin, RedirectResponse):
+        return admin
+    db = SessionLocal()
+    try:
+        target = db.get(models.User, uid)
+        if target is None:
+            return RedirectResponse("/accounts?msg=" + quote("账号不存在"), status_code=303)
+        if target.id == admin.id:
+            return RedirectResponse("/accounts?msg=" + quote("不能停用自己"), status_code=303)
+        if target.role == "admin" and target.enabled and _last_admin_count(db) <= 1:
+            return RedirectResponse("/accounts?msg=" + quote("至少保留一个启用中的管理员"), status_code=303)
+        target.enabled = not target.enabled
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse("/accounts?msg=" + quote("已更新启用状态"), status_code=303)
+
+
+@app.post("/accounts/{uid}/password")
+async def reset_account_password(uid: int, request: Request, password: str = Form(...)):
+    admin = _require_admin(request)
+    if isinstance(admin, RedirectResponse):
+        return admin
+    if len(password) < 6:
+        return RedirectResponse("/accounts?msg=" + quote("新密码至少 6 位"), status_code=303)
+    db = SessionLocal()
+    try:
+        target = db.get(models.User, uid)
+        if target is None:
+            return RedirectResponse("/accounts?msg=" + quote("账号不存在"), status_code=303)
+        target.password_hash = security.hash_password(password)
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse("/accounts?msg=" + quote("密码已重置"), status_code=303)
+
+
+@app.post("/accounts/{uid}/delete")
+async def delete_account(uid: int, request: Request):
+    admin = _require_admin(request)
+    if isinstance(admin, RedirectResponse):
+        return admin
+    db = SessionLocal()
+    try:
+        target = db.get(models.User, uid)
+        if target is None:
+            return RedirectResponse("/accounts?msg=" + quote("账号不存在"), status_code=303)
+        if target.id == admin.id:
+            return RedirectResponse("/accounts?msg=" + quote("不能删除自己"), status_code=303)
+        if target.role == "admin" and target.enabled and _last_admin_count(db) <= 1:
+            return RedirectResponse("/accounts?msg=" + quote("至少保留一个启用中的管理员"), status_code=303)
+        db.delete(target)
+        db.commit()
+    finally:
+        db.close()
+    return RedirectResponse("/accounts?msg=" + quote("账号已删除"), status_code=303)
+
+
 # ---------------- API ----------------
 
 @app.get("/api/stats")
-async def api_stats():
+async def api_stats(request: Request):
+    user = current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
     db = SessionLocal()
     try:
         total_items = db.scalar(select(func.count(models.Item.id))) or 0
@@ -508,9 +789,11 @@ async def api_stats():
 
 
 @app.post("/api/scan")
-async def api_scan(platform: Optional[str] = Form(None)):
+async def api_scan(request: Request, platform: Optional[str] = Form(None)):
     """手动触发一次抓取（前台异步执行）。"""
-    import asyncio
+    user = current_user(request)
+    if user is None:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
 
     async def run():
         try:
