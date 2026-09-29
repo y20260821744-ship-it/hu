@@ -18,6 +18,7 @@ Telegram / 钉钉 / Bark / 企业微信 / 微信公众号（第三方）等多�
 |---|---|
 | 关键词监控 | 多关键词并行；支持日/中/英文；中文自动映射日文同义词（`app/matcher.py` 可扩展）；关键词内空格 = AND 逻辑 |
 | 抓取频率 | 每平台独立设置（默认 300 秒，下限 30 秒）；内置日本 IP 代理池轮换、随机 UA、指数退避、连续失败自动降频 |
+| 代理池管理 | Web 面板「代理池」直接增删 / 启停 / 测试代理，改完**无需重启**立即生效，自动轮换；.env 的 PROXY_LIST 作兜底 |
 | 实时上新 | 命中且从未入库的商品立即推送；`platform+item_id` 唯一索引保证**绝不重复推送** |
 | 高级规则 | 价格区间、指定卖家、指定品牌（任一规则满足即放行） |
 | 通知渠道 | Telegram / 钉钉 / Bark / 企业微信 / PushPlus / WxPusher / Server酱 / 邮件 SMTP / 通用 Webhook；失败自动重试 3 次并记录日志 |
@@ -97,11 +98,12 @@ docker compose up -d --build
 ## 代理配置（重要）
 
 - 各平台服务条款**禁止高频爬取**；请保持最低可用频率，优先使用官方/非官方 API 而非纯 HTML 解析。
-- **日本 IP 代理是硬需求**：国内 IP 大概率被限制或验证码拦截。在 `.env` 中配置：
+- **日本 IP 代理是硬需求**：国内 IP 大概率被限制或验证码拦截。两种配置方式（二选一或组合）：
   ```
   PROXY_LIST=http://user:pass@jp-proxy1:port,http://user:pass@jp-proxy2:port
   ```
-  多个代理自动轮换，单 IP 限频。
+  或登录 Web 面板 → **代理池** 页直接添加（推荐：可增删/启停/测试，改完无需重启）。
+  面板启用代理优先于 `PROXY_LIST`；多个代理自动轮换，单 IP 限频。
 - 雅虎系平台风控更严，遇验证码**自动跳过本轮并告警**，不做暴力重试（本工具当前未含雅虎平台，后续扩展时遵循此原则）。
 - 连续失败达到 `FAILURE_DOWNGRADE_THRESHOLD`（默认 3 次）自动降频，面板会显示「已降频」告警。
 
@@ -112,6 +114,7 @@ docker compose up -d --build
 - 规则 `/rules`：价格区间 / 指定卖家 / 品牌
 - 命中记录 `/items`：按平台筛选、分页
 - 平台设置 `/settings`：每平台抓取频率、代理模式、启用渠道（保存后调度自动同步，无需重启）
+- 代理池 `/proxies`：增删 / 启停 / 测试代理，抓取自动轮换，改完立即生效
 - 推送日志 `/logs`：各渠道推送结果与错误
 
 ## 合规与风控说明
@@ -131,13 +134,13 @@ hu/
 ├── app/
 │   ├── config.py           # 环境变量配置
 │   ├── database.py         # SQLAlchemy 引擎/会话
-│   ├── models.py           # 数据表（keywords/rules/items/push_logs/price_history/settings/sellers）
+│   ├── models.py           # 数据表（keywords/rules/items/push_logs/price_history/settings/sellers/proxies）
 │   ├── matcher.py          # 关键词+同义词映射、规则匹配
 │   ├── service.py          # 核心流程：抓取→匹配→去重→推送
 │   ├── scheduler.py        # APScheduler 每平台独立频率调度
 │   ├── main.py             # FastAPI Web 面板
 │   ├── crawler/
-│   │   └── fetcher.py      # httpx + 代理池 + 随机UA + 指数退避 + 降频
+│   │   └── fetcher.py      # httpx + 代理池(面板/DB) + 随机UA + 指数退避 + 降频
 │   ├── adapters/
 │   │   ├── base.py         # 适配器基类 + 统一商品字段
 │   │   ├── mercari.py      # 煤炉

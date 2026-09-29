@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>代理池管理</h1>
+
+{% if msg %}<div style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:14px;">{{ msg }}</div>{% endif %}
+
+<div class="card">
+  <h2>添加代理（日本原生 IP 推荐）</h2>
+  <form method="post" action="/proxies" class="row">
+    <input type="text" name="url" placeholder="http://user:pass@jp-host:port" required style="width:320px">
+    <input type="text" name="remark" placeholder="备注，如：日本住宅-1">
+    <button>添加</button>
+  </form>
+  <p class="muted">格式：<code>http://user:pass@host:port</code>，多个代理自动轮换；不用填协议时自动补 http://。添加/启停/删除后<b>立即生效，无需重启</b>。点「测试」可查看该代理的出口 IP。</p>
+</div>
+
+<div class="card">
+  <h2>启用中的代理列表</h2>
+  <table>
+    <tr><th>代理地址</th><th>备注</th><th>状态</th><th>测试失败次数</th><th>最近测试成功</th><th>操作</th></tr>
+    {% for p in proxies %}
+    <tr>
+      <td><code>{{ mask_proxy(p.url) }}</code></td>
+      <td>{{ p.remark or '-' }}</td>
+      <td>{% if p.enabled %}<span class="badge badge-ok">启用</span>{% else %}<span class="badge badge-info">停用</span>{% endif %}</td>
+      <td>{{ p.fail_count }}</td>
+      <td>{{ p.last_ok_at.strftime('%m-%d %H:%M') if p.last_ok_at else '-' }}</td>
+      <td class="row">
+        <form method="post" action="/proxies/{{ p.id }}/test"><button class="btn-sm secondary">测试</button></form>
+        <form method="post" action="/proxies/{{ p.id }}/toggle"><button class="btn-sm secondary">{{ '停用' if p.enabled else '启用' }}</button></form>
+        <form method="post" action="/proxies/{{ p.id }}/delete" onsubmit="return confirm('确认删除该代理？')"><button class="btn-sm danger">删除</button></form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">代理池为空。可在此添加，或在 .env 的 PROXY_LIST 配置（面板代理优先）。</td></tr>
+    {% endfor %}
+  </table>
+  {% if env_proxies %}
+  <p class="muted" style="margin-top:10px">.env 兜底代理（面板代理池为空时使用）：{% for e in env_proxies %}<code>{{ mask_proxy(e) }}</code>{% if not loop.last %}、{% endif %}{% endfor %}</p>
+  {% endif %}
+</div>
+{% endblock %}

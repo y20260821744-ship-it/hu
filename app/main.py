@@ -1,7 +1,7 @@
 """FastAPI 应用：Web 管理面板 + 后台调度。
 
 面板功能：仪表盘（监控状态/统计）、关键词管理、规则管理、命中记录、
-平台设置（频率/渠道）、推送日志、手动触发抓取。
+平台设置（频率/渠道）、代理池管理（增删/启停/测试）、推送日志、手动触发抓取。
 """
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
+from urllib.parse import quote
 
+import httpx
 from fastapi import FastAPI, Form, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -18,6 +20,7 @@ from sqlalchemy import desc, func, select
 from . import models
 from .adapters import all_adapters, supported_platforms
 from .config import settings
+from .crawler.fetcher import bump_proxy_pool
 from .database import SessionLocal, init_db
 from .scheduler import SchedulerManager
 
@@ -348,6 +351,134 @@ async def logs_page(request: Request):
         )
     finally:
         db.close()
+
+
+# ---------------- 代理池管理 ----------------
+
+def _mask_proxy(url: str) -> str:
+    """展示时隐藏代理的用户名/密码（只留 协议://***@host:port）。"""
+    try:
+        from urllib.parse import urlsplit, urlunsplit
+
+        parts = urlsplit(url)
+        if parts.username is not None:
+            host = parts.hostname or ""
+            if parts.port:
+                host = f"{host}:{parts.port}"
+            return urlunsplit((parts.scheme, f"***@{host}", parts.path, parts.query, parts.fragment))
+    except Exception:  # noqa: BLE001
+        pass
+    return url
+
+
+@app.get("/proxies", response_class=HTMLResponse)
+async def proxies_page(request: Request, msg: Optional[str] = Query(None)):
+    db = SessionLocal()
+    try:
+        proxies = db.scalars(select(models.Proxy).order_by(models.Proxy.id)).all()
+        return templates.TemplateResponse(
+            request,
+            "proxies.html",
+            {
+                "page": "proxies",
+                "proxies": proxies,
+                "msg": msg or "",
+                "mask_proxy": _mask_proxy,
+                "env_proxies": settings.PROXY_LIST,
+            },
+        )
+    finally:
+        db.close()
+
+
+@app.post("/proxies")
+async def add_proxy(url: str = Form(...), remark: str = Form("")):
+    db = SessionLocal()
+    try:
+        clean = _restore_utf8(url).strip()
+        if not clean:
+            return RedirectResponse("/proxies?msg=" + quote("代理地址不能为空"), status_code=303)
+        if not clean.startswith(("http://", "https://", "socks5://", "socks5h://")):
+            clean = "http://" + clean
+        db.add(models.Proxy(url=clean, remark=_restore_utf8(remark).strip(), enabled=True))
+        db.commit()
+    finally:
+        db.close()
+    bump_proxy_pool()
+    return RedirectResponse("/proxies?msg=" + quote("已添加，抓取层已生效（无需重启）"), status_code=303)
+
+
+@app.post("/proxies/{pid}/toggle")
+async def toggle_proxy(pid: int):
+    db = SessionLocal()
+    try:
+        proxy = db.get(models.Proxy, pid)
+        if proxy:
+            proxy.enabled = not proxy.enabled
+            db.commit()
+    finally:
+        db.close()
+    bump_proxy_pool()
+    return RedirectResponse("/proxies?msg=" + quote("已更新启用状态"), status_code=303)
+
+
+@app.post("/proxies/{pid}/delete")
+async def delete_proxy(pid: int):
+    db = SessionLocal()
+    try:
+        proxy = db.get(models.Proxy, pid)
+        if proxy:
+            db.delete(proxy)
+            db.commit()
+    finally:
+        db.close()
+    bump_proxy_pool()
+    return RedirectResponse("/proxies?msg=" + quote("已删除"), status_code=303)
+
+
+@app.post("/proxies/{pid}/test")
+async def test_proxy(pid: int):
+    """通过该代理访问 ipify 获取出口 IP，验证连通性。"""
+    db = SessionLocal()
+    try:
+        proxy = db.get(models.Proxy, pid)
+        if proxy is None:
+            return RedirectResponse("/proxies?msg=" + quote("代理不存在"), status_code=303)
+        url = proxy.url
+    finally:
+        db.close()
+
+    exit_ip = ""
+    try:
+        async with httpx.AsyncClient(proxy=url, timeout=15, follow_redirects=True) as client:
+            resp = await client.get("https://api.ipify.org?format=json")
+            resp.raise_for_status()
+            exit_ip = resp.json().get("ip", "?")
+    except Exception as exc:  # noqa: BLE001 连通失败
+        db = SessionLocal()
+        try:
+            p = db.get(models.Proxy, pid)
+            if p:
+                p.fail_count += 1
+                db.commit()
+        finally:
+            db.close()
+        return RedirectResponse(
+            "/proxies?msg=" + quote(f"测试失败：{str(exc)[:120]}"), status_code=303
+        )
+
+    db = SessionLocal()
+    try:
+        p = db.get(models.Proxy, pid)
+        if p:
+            p.fail_count = 0
+            p.last_ok_at = datetime.now()
+            db.commit()
+    finally:
+        db.close()
+    return RedirectResponse(
+        "/proxies?msg=" + quote(f"测试成功，出口 IP: {exit_ip}"), status_code=303
+    )
 
 
 # ---------------- API ----------------
