@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>推送日志（最近 200 条）</h1>
+
+<div class="card">
+  <table>
+    <tr><th>时间</th><th>商品ID</th><th>渠道</th><th>状态</th><th>错误信息</th></tr>
+    {% for log in logs %}
+    <tr>
+      <td>{{ log.pushed_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+      <td>{{ log.item_id }}</td>
+      <td>{{ log.channel }}</td>
+      <td>{% if log.status=='success' %}<span class="badge badge-ok">成功</span>{% else %}<span class="badge badge-err">失败</span>{% endif %}</td>
+      <td class="muted">{{ log.error or '-' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">暂无推送日志。</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>监控关键词</h1>
+
+<div class="card">
+  <h2>添加关键词</h2>
+  <form method="post" action="/keywords" class="row">
+    <input type="text" name="keyword" placeholder="如：ポケモン カード / 海贼王手办 / PS5" required style="width:260px">
+    <select name="lang">
+      <option value="ja">日文 ja</option>
+      <option value="zh">中文 zh</option>
+      <option value="en">英文 en</option>
+    </select>
+    <input type="text" name="brand_tag" placeholder="品牌标签(可选)">
+    <input type="text" name="model_tag" placeholder="型号标签(可选)">
+    <input type="text" name="category" placeholder="分类(可选)">
+    <button>添加</button>
+  </form>
+  <p class="muted">提示：关键词内用空格分隔 = AND 逻辑（如「ポケモン カード」需同时命中）。中文关键词会自动匹配常用日文同义词（如 海贼王→ワンピース），可在 matcher.py 的 SYNONYMS 中扩展。</p>
+</div>
+
+<div class="card">
+  <h2>关键词列表</h2>
+  <table>
+    <tr><th>关键词</th><th>语言</th><th>品牌/型号/分类</th><th>状态</th><th>操作</th></tr>
+    {% for kw in keywords %}
+    <tr>
+      <td><b>{{ kw.keyword }}</b></td>
+      <td>{{ kw.lang }}</td>
+      <td>
+        {% if kw.brand_tag %}<span class="tag">品牌 {{ kw.brand_tag }}</span>{% endif %}
+        {% if kw.model_tag %}<span class="tag">型号 {{ kw.model_tag }}</span>{% endif %}
+        {% if kw.category %}<span class="tag">分类 {{ kw.category }}</span>{% endif %}
+      </td>
+      <td>{% if kw.enabled %}<span class="badge badge-ok">启用</span>{% else %}<span class="badge badge-info">停用</span>{% endif %}</td>
+      <td class="row">
+        <form method="post" action="/keywords/{{ kw.id }}/toggle"><button class="btn-sm secondary">{{ '停用' if kw.enabled else '启用' }}</button></form>
+        <form method="post" action="/keywords/{{ kw.id }}/delete" onsubmit="return confirm('确认删除该关键词？')"><button class="btn-sm danger">删除</button></form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">还没有关键词，先添加一个吧。</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

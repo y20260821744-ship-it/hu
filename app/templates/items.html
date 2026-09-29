@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>命中记录（共 {{ total }} 条）</h1>
+
+<div class="card">
+  <form method="get" action="/items" class="row">
+    <select name="platform" onchange="this.form.submit()">
+      <option value="">全部平台</option>
+      {% for p in platforms %}<option value="{{ p }}" {{ 'selected' if cur_platform==p }}>{{ p }}</option>{% endfor %}
+    </select>
+    <span class="muted">筛选平台</span>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th></th><th>平台</th><th>商品ID</th><th>标题</th><th>价格</th><th>卖家</th><th>状态</th><th>发现时间</th></tr>
+    {% for it in items %}
+    <tr>
+      <td>{% if it.img_url %}<img class="thumb" src="{{ it.img_url }}" alt="">{% endif %}</td>
+      <td>{{ it.platform }}</td>
+      <td><span class="muted">{{ it.item_id }}</span></td>
+      <td><a href="{{ it.item_url }}" target="_blank" rel="noopener">{{ it.title[:80] }}</a></td>
+      <td>¥{{ "{:,}".format(it.price) }}</td>
+      <td>{{ it.seller or '-' }}</td>
+      <td>{{ it.status }}</td>
+      <td>{{ it.first_seen_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="muted">暂无命中记录。</td></tr>
+    {% endfor %}
+  </table>
+  {% if pages > 1 %}
+  <div class="pager">
+    {% if page > 1 %}<a href="/items?page={{ page-1 }}{% if cur_platform %}&platform={{ cur_platform }}{% endif %}"><button class="btn-sm secondary">上一页</button></a>{% endif %}
+    <span class="muted">第 {{ page }} / {{ pages }} 页</span>
+    {% if page < pages %}<a href="/items?page={{ page+1 }}{% if cur_platform %}&platform={{ cur_platform }}{% endif %}"><button class="btn-sm secondary">下一页</button></a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

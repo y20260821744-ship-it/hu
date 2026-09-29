@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>平台设置</h1>
+
+<div class="card">
+  <h2>抓取频率与通知渠道</h2>
+  <p class="muted">频率下限 30 秒。渠道名用英文逗号分隔；未配置密钥的渠道会被自动跳过（在 .env 中配置）。</p>
+  {% for row in rows %}
+  <form method="post" action="/settings/{{ row.platform }}" class="row" style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+    <b style="width:160px">{{ row.name }}（{{ row.platform }}）</b>
+    <input type="number" name="interval" value="{{ row.interval }}" min="30" style="width:90px"> 秒
+    <select name="proxy_mode" style="width:120px">
+      <option value="auto" {{ 'selected' if row.proxy_mode=='auto' }}>自动</option>
+      <option value="direct" {{ 'selected' if row.proxy_mode=='direct' }}>直连</option>
+      <option value="proxy" {{ 'selected' if row.proxy_mode=='proxy' }}>仅代理</option>
+    </select>
+    <input type="text" name="channels" value="{{ row.channels }}" placeholder="telegram,dingtalk,bark" style="width:300px">
+    <button>保存</button>
+  </form>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2>可用渠道</h2>
+  <table>
+    <tr><th>渠道</th><th>说明</th><th>需要配置的 .env 项</th></tr>
+    <tr><td><b>telegram</b></td><td>推荐主通道，稳定免费</td><td>TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID</td></tr>
+    <tr><td><b>dingtalk</b></td><td>钉钉群机器人</td><td>DINGTALK_WEBHOOK（可选 DINGTALK_SECRET）</td></tr>
+    <tr><td><b>bark</b></td><td>iOS Bark</td><td>BARK_KEY</td></tr>
+    <tr><td><b>wecom</b></td><td>企业微信群机器人</td><td>WECOM_WEBHOOK</td></tr>
+    <tr><td><b>pushplus</b></td><td>微信公众号(第三方)</td><td>PUSHPLUS_TOKEN</td></tr>
+    <tr><td><b>wxpusher</b></td><td>微信公众号(第三方)</td><td>WXPUSHER_APP_TOKEN</td></tr>
+    <tr><td><b>serverchan</b></td><td>Server酱 Turbo</td><td>SERVERCHAN_SENDKEY</td></tr>
+    <tr><td><b>email</b></td><td>SMTP 邮件</td><td>SMTP_HOST/PORT/USER/PASSWORD/TO</td></tr>
+    <tr><td><b>webhook</b></td><td>通用 HTTP POST</td><td>WEBHOOK_URL</td></tr>
+  </table>
+</div>
+{% endblock %}

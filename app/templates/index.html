@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>仪表盘</h1>
+
+<div class="stats">
+  <div class="stat"><div class="num">{{ stats.total_items }}</div><div class="label">累计命中商品</div></div>
+  <div class="stat"><div class="num">{{ stats.today_new }}</div><div class="label">今日新增</div></div>
+  <div class="stat"><div class="num">{{ stats.total_keywords }}</div><div class="label">关键词（启用 {{ stats.enabled_keywords }}）</div></div>
+  <div class="stat"><div class="num">{{ stats.total_rules }}</div><div class="label">高级规则</div></div>
+</div>
+
+<div class="card">
+  <h2>平台监控状态</h2>
+  <table>
+    <tr><th>平台</th><th>抓取频率</th><th>通知渠道</th><th>命中数</th><th>风控状态</th></tr>
+    {% for p in platform_stats %}
+    <tr>
+      <td><b>{{ p.name }}</b></td>
+      <td>{{ p.interval }} 秒</td>
+      <td><span class="muted">{{ p.channels or '默认' }}</span></td>
+      <td>{{ p.items }}</td>
+      <td>
+        {% if p.downgraded %}<span class="badge badge-warn">已降频（连续失败）</span>
+        {% elif p.failures > 0 %}<span class="badge badge-warn">失败 {{ p.failures }} 次</span>
+        {% else %}<span class="badge badge-ok">正常</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="row" style="margin-top:12px">
+    <form method="post" action="/api/scan">
+      <button>立即抓取全部平台</button>
+    </form>
+    <span class="muted">单次抓取可能耗时数秒至数十秒，请耐心等待。</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>最近命中</h2>
+  {% if recent_items %}
+  <table>
+    <tr><th></th><th>平台</th><th>标题</th><th>价格</th><th>卖家</th><th>状态</th><th>发现时间</th></tr>
+    {% for it in recent_items %}
+    <tr>
+      <td>{% if it.img_url %}<img class="thumb" src="{{ it.img_url }}" alt="">{% endif %}</td>
+      <td>{{ display_name(it.platform) }}</td>
+      <td><a href="{{ it.item_url }}" target="_blank" rel="noopener">{{ it.title[:60] }}</a></td>
+      <td>¥{{ "{:,}".format(it.price) }}</td>
+      <td>{{ it.seller or '-' }}</td>
+      <td>{{ it.status }}</td>
+      <td>{{ it.first_seen_at.strftime('%m-%d %H:%M') }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">暂无命中记录。先到「关键词」页添加监控关键词。</p>
+  {% endif %}
+</div>
+{% endblock %}

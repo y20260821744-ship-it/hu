@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}日本二手平台上新监控{% endblock %}</title>
+  <style>
+    :root { --primary:#2563eb; --bg:#f5f6fa; --card:#fff; --border:#e5e7eb; --text:#1f2937; --muted:#6b7280; --danger:#dc2626; --ok:#16a34a; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width:1100px; margin:0 auto; padding:16px; }
+    nav { background:#111827; }
+    nav .wrap { display:flex; gap:4px; align-items:center; padding:0 16px; }
+    nav a { color:#d1d5db; text-decoration:none; padding:12px 14px; font-size:14px; }
+    nav a:hover { color:#fff; }
+    nav a.active { color:#fff; border-bottom:2px solid var(--primary); }
+    nav .brand { color:#fff; font-weight:600; margin-right:12px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px; }
+    h1 { font-size:20px; margin:8px 0 16px; }
+    h2 { font-size:16px; margin:0 0 12px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); }
+    th { color:var(--muted); font-weight:500; background:#f9fafb; }
+    .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+    .stat { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; }
+    .stat .num { font-size:26px; font-weight:700; }
+    .stat .label { color:var(--muted); font-size:13px; margin-top:4px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
+    .badge-ok { background:#dcfce7; color:var(--ok); }
+    .badge-warn { background:#fef3c7; color:#b45309; }
+    .badge-err { background:#fee2e2; color:var(--danger); }
+    .badge-info { background:#e0e7ff; color:#4338ca; }
+    input[type=text],input[type=number],select { padding:7px 10px; border:1px solid var(--border); border-radius:6px; font-size:14px; }
+    button { padding:7px 14px; border:none; border-radius:6px; background:var(--primary); color:#fff; font-size:14px; cursor:pointer; }
+    button.secondary { background:#e5e7eb; color:#374151; }
+    button.danger { background:var(--danger); }
+    .btn-sm { padding:3px 10px; font-size:12px; }
+    .muted { color:var(--muted); font-size:13px; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .pager { display:flex; gap:8px; align-items:center; margin-top:12px; }
+    img.thumb { width:56px; height:56px; object-fit:cover; border-radius:6px; }
+    .tag { display:inline-block; background:#eef2ff; color:#4338ca; border-radius:6px; padding:2px 8px; font-size:12px; margin-right:4px; }
+  </style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <span class="brand">🛰 上新监控</span>
+    <a href="/" class="{{ 'active' if page=='dashboard' }}">仪表盘</a>
+    <a href="/keywords" class="{{ 'active' if page=='keywords' }}">关键词</a>
+    <a href="/rules" class="{{ 'active' if page=='rules' }}">规则</a>
+    <a href="/items" class="{{ 'active' if page=='items' }}">命中记录</a>
+    <a href="/settings" class="{{ 'active' if page=='settings' }}">平台设置</a>
+    <a href="/logs" class="{{ 'active' if page=='logs' }}">推送日志</a>
+  </div>
+</nav>
+<div class="wrap">
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>

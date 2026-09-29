@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>高级监控规则</h1>
+
+<div class="card">
+  <h2>添加规则</h2>
+  <form method="post" action="/rules" class="row">
+    <select name="platform">
+      <option value="">全部平台</option>
+      {% for p in platforms %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+    </select>
+    <input type="number" name="price_min" placeholder="最低价(日元)" style="width:130px">
+    <input type="number" name="price_max" placeholder="最高价(日元)" style="width:130px">
+    <input type="text" name="seller_id" placeholder="指定卖家(可选)">
+    <input type="text" name="brand" placeholder="指定品牌(可选)">
+    <button>添加</button>
+  </form>
+  <p class="muted">规则为「任一满足即放行」：命中一条规则的所有条件即通过；不配置规则则全部放行。</p>
+</div>
+
+<div class="card">
+  <h2>规则列表</h2>
+  <table>
+    <tr><th>平台</th><th>价格区间</th><th>指定卖家</th><th>品牌</th><th>状态</th><th>操作</th></tr>
+    {% for r in rules %}
+    <tr>
+      <td>{{ r.platform or '全部' }}</td>
+      <td>{{ r.price_min or '-' }} ~ {{ r.price_max or '-' }} 円</td>
+      <td>{{ r.seller_id or '-' }}</td>
+      <td>{{ r.brand or '-' }}</td>
+      <td>{% if r.enabled %}<span class="badge badge-ok">启用</span>{% else %}<span class="badge badge-info">停用</span>{% endif %}</td>
+      <td class="row">
+        <form method="post" action="/rules/{{ r.id }}/toggle"><button class="btn-sm secondary">{{ '停用' if r.enabled else '启用' }}</button></form>
+        <form method="post" action="/rules/{{ r.id }}/delete" onsubmit="return confirm('确认删除？')"><button class="btn-sm danger">删除</button></form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">暂无规则（所有命中的商品都会放行）。</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
