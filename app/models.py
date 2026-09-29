@@ -135,3 +135,24 @@ class Seller(Base):
     seller_id: Mapped[str] = mapped_column(String(200))
     seller_name: Mapped[str] = mapped_column(String(200), default="")
     note: Mapped[str] = mapped_column(String(500), default="")
+
+
+class Proxy(Base):
+    """代理池：在 Web 面板中维护的抓取出口代理（日本原生 IP 等）。
+
+    面板里增删/启停/测试即改即生效；抓取时按顺序轮换，
+    面板代理池为空时回退到 .env 的 PROXY_LIST。
+    """
+
+    __tablename__ = "proxies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(String(500), nullable=False)  # http://user:pass@host:port
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    remark: Mapped[str] = mapped_column(String(200), default="")  # 备注，如「日本住宅-1」
+    fail_count: Mapped[int] = mapped_column(Integer, default=0)  # 最近测试失败次数
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # 最近一次测试成功时间
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Proxy {self.url} enabled={self.enabled}>"
