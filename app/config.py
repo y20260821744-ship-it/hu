@@ -105,6 +105,13 @@ class Settings:
     # ---- 默认启用渠道（逗号分隔，如 telegram,dingtalk,bark）----
     DEFAULT_CHANNELS: str = _env("DEFAULT_CHANNELS", "telegram,dingtalk,bark")
 
+    # ---- 面板登录账号 ----
+    # 首次启动自动创建的管理员账号（务必修改默认密码 admin123）
+    ADMIN_USERNAME: str = _env("ADMIN_USERNAME", "admin")
+    ADMIN_PASSWORD: str = _env("ADMIN_PASSWORD", "admin123")
+    # 登录会话有效期（小时）
+    SESSION_TTL_HOURS: int = _env_int("SESSION_TTL_HOURS", 168)  # 7 天
+
     # ---- 汇率（日元→人民币，用于推送展示；可按需更新）----
     JPY_CNY_RATE: float = float(_env("JPY_CNY_RATE", "0.048"))
 
