@@ -4,7 +4,7 @@
 
 <div class="card">
   <h2>抓取频率与通知渠道</h2>
-  <p class="muted">频率下限 30 秒。渠道名用英文逗号分隔；未配置密钥的渠道会被自动跳过（在 .env 中配置）。</p>
+  <p class="muted">频率下限 {{ 30 }} 秒。渠道名用英文逗号分隔；未配置密钥的渠道会被自动跳过（在 .env 中配置）。</p>
   {% for row in rows %}
   <form method="post" action="/settings/{{ row.platform }}" class="row" style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
     <b style="width:160px">{{ row.name }}（{{ row.platform }}）</b>

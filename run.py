@@ -1,3 +1,13 @@
+"""命令行入口。
+
+用法：
+  python run.py once                # 全平台抓取一次（打印统计）
+  python run.py scan -p mercari     # 指定平台抓取一次
+  python run.py serve               # 启动 Web 面板 + 后台调度
+  python run.py addkw "关键词" [lang]  # 快速添加监控关键词
+"""
+from __future__ import annotations
+
 import argparse
 import asyncio
 import logging
