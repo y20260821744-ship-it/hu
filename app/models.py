@@ -156,3 +156,24 @@ class Proxy(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Proxy {self.url} enabled={self.enabled}>"
+
+
+class User(Base):
+    """面板登录账号。
+
+    role: admin（可管理账号）/ user（普通监控账号）。
+    密码以 PBKDF2-SHA256 哈希存储（app/security.py），不存明文。
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), default="user")  # admin / user
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<User {self.username} role={self.role} enabled={self.enabled}>"
