@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>账号管理</h1>
+
+{% if msg %}<div style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:14px;">{{ msg }}</div>{% endif %}
+{% if is_default_pw %}<div style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:14px;">⚠️ 你还在使用默认管理员密码 <code>{{ default_username }} / admin123</code>，请尽快在下方「重置密码」修改，防止他人登录。</div>{% endif %}
+
+<div class="card">
+  <h2>创建账号</h2>
+  <form method="post" action="/accounts" class="row">
+    <input type="text" name="username" placeholder="用户名" required style="width:160px">
+    <input type="password" name="password" placeholder="密码（至少 6 位）" required style="width:180px">
+    <select name="role" style="width:110px">
+      <option value="user">普通用户</option>
+      <option value="admin">管理员</option>
+    </select>
+    <button>创建</button>
+  </form>
+  <p class="muted">普通用户可登录并使用全部监控功能；管理员额外拥有本页账号管理权限。</p>
+</div>
+
+<div class="card">
+  <h2>账号列表</h2>
+  <table>
+    <tr><th>用户名</th><th>角色</th><th>状态</th><th>最近登录</th><th>创建时间</th><th>操作</th></tr>
+    {% for u in users %}
+    <tr>
+      <td><b>{{ u.username }}</b>{% if u.id == user.id %}<span class="badge badge-info" style="margin-left:6px">当前</span>{% endif %}</td>
+      <td>{{ '管理员' if u.role=='admin' else '普通用户' }}</td>
+      <td>{% if u.enabled %}<span class="badge badge-ok">启用</span>{% else %}<span class="badge badge-err">停用</span>{% endif %}</td>
+      <td>{{ u.last_login_at.strftime('%Y-%m-%d %H:%M') if u.last_login_at else '-' }}</td>
+      <td>{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+      <td class="row">
+        <form method="post" action="/accounts/{{ u.id }}/password" onsubmit="return confirm('确认重置 {{ u.username }} 的密码？')">
+          <input type="password" name="password" placeholder="新密码" style="width:130px" required>
+          <button class="btn-sm secondary">重置密码</button>
+        </form>
+        {% if u.id != user.id %}
+        <form method="post" action="/accounts/{{ u.id }}/toggle"><button class="btn-sm secondary">{{ '停用' if u.enabled else '启用' }}</button></form>
+        <form method="post" action="/accounts/{{ u.id }}/delete" onsubmit="return confirm('确认删除 {{ u.username }}？')"><button class="btn-sm danger">删除</button></form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

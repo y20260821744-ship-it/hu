@@ -53,6 +53,13 @@
     <a href="/settings" class="{{ 'active' if page=='settings' }}">平台设置</a>
     <a href="/proxies" class="{{ 'active' if page=='proxies' }}">代理池</a>
     <a href="/logs" class="{{ 'active' if page=='logs' }}">推送日志</a>
+    {% if user and user.role == 'admin' %}<a href="/accounts" class="{{ 'active' if page=='accounts' }}">账号管理</a>{% endif %}
+    {% if user %}
+    <span style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+      <span style="color:#d1d5db;font-size:13px;">👤 {{ user.username }}（{{ '管理员' if user.role=='admin' else '用户' }}）</span>
+      <a href="/logout" style="color:#fca5a5;font-size:13px;">退出</a>
+    </span>
+    {% endif %}
   </div>
 </nav>
 <div class="wrap">
