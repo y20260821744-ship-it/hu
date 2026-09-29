@@ -49,10 +49,6 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):  # noqa: ANN001
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
-class SessionLocal:
-    pass
-
-
 def init_db() -> None:
     """建表（幂等）。"""
     from . import models  # noqa: F401  确保模型已注册
